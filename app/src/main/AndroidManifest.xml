@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
     <application
         android:allowBackup="false"
         android:label="DeepSeek Android TTS"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <activity android:name=".SettingsActivity" android:exported="true">
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -14,11 +21,16 @@
         </activity>
         <service
             android:name=".DeepSeekTtsService"
-            android:label="DeepSeek TTS (prototype)"
+            android:label="DeepSeek TTS"
+            android:description="@string/app_name"
             android:permission="android.permission.BIND_TEXT_SERVICE"
             android:exported="true">
-            <intent-filter><action android:name="android.intent.action.TTS_SERVICE" /></intent-filter>
-            <meta-data android:name="android.speech.tts" android:resource="@xml/tts_engine" />
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech.tts"
+                android:resource="@xml/tts_engine" />
         </service>
     </application>
 </manifest>
