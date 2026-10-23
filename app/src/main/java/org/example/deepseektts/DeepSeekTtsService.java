@@ -74,7 +74,7 @@ public class DeepSeekTtsService extends TextToSpeechService {
             }
             callback.done();
         } catch (Exception e) {
-            callback.error("DeepSeek TTS prototype: " + e.getMessage());
+            callback.error();
         }
     }
 
