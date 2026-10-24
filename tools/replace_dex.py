@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import pathlib, sys, zipfile
 
-if len(sys.argv) < 4 or (len(sys.argv) - 2) % 2 != 0:
+if len(sys.argv) < 4 or (len(sys.argv) - 3) % 2 != 0:
     raise SystemExit("Usage: replace_dex.py SOURCE.apk OUTPUT.apk DEX_NAME DEX_FILE [DEX_NAME DEX_FILE ...]")
 source = pathlib.Path(sys.argv[1])
 output = pathlib.Path(sys.argv[2])
