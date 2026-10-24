@@ -65,10 +65,13 @@ jobs:
           if [ "$build_rc" -eq 0 ] && [ -s base-patched-full.apk ]; then
             cp base-patched-full.apk base-patched-unsigned.apk
           else
-            echo "Resource repack failed; retaining original resources and transplanting every assembled patched DEX."
-            test -s decoded/build/apk/classes4.dex
-            test -s decoded/build/apk/classes6.dex
-            python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex decoded/build/apk/classes4.dex classes6.dex decoded/build/apk/classes6.dex
+            echo "Resource repack failed; rebuilding DEX files without resources, then transplanting them into the untouched original APK."
+            java -Xmx5g -jar apktool.jar b decoded --no-res -o dex-only.apk
+            unzip -p dex-only.apk classes4.dex > patched-classes4.dex
+            unzip -p dex-only.apk classes6.dex > patched-classes6.dex
+            test -s patched-classes4.dex
+            test -s patched-classes6.dex
+            python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex patched-classes4.dex classes6.dex patched-classes6.dex
           fi
           test -s base-patched-unsigned.apk
 
