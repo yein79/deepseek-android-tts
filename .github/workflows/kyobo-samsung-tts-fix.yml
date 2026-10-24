@@ -33,7 +33,7 @@ jobs:
           test "$(stat -c%s source.xapk)" -gt 50000000
           mkdir source
           unzip -q source.xapk -d source
-          find source -maxdepth 2 -type f -name '*.apk' -printf '%p %s bytes\n'
+          find source -maxdepth 2 -type f -name '*.apk' -printf '%p %s bytes\\n'
           test "$(find source -type f -name '*.apk' | wc -l)" -ge 2
           if [ -f source/base.apk ]; then
             cp source/base.apk base-original.apk
@@ -47,7 +47,7 @@ jobs:
       - name: Install Apktool
         run: |
           set -euo pipefail
-          URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(a["browser_download_url"] for a in d["assets"] if a["name"].endswith(".jar") and a["name"].startswith("apktool_")))')"
+          URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(a["browser_download_url"] for a in d["assets"] if a["name"].endswith(".jar") and a["name"].startswith("apktool_")))' )"
           curl -fL "$URL" -o apktool.jar
           java -jar apktool.jar --version
 
@@ -98,6 +98,34 @@ jobs:
           for f in output/*.apk; do "$BUILD_TOOLS/apksigner" verify "$f"; done
           (cd output && zip -q -r ../Kyobo-2.2.6-Samsung-TTS-Fix.zip .)
           sha256sum Kyobo-2.2.6-Samsung-TTS-Fix.zip
+
+      - name: Try merging split APKs into a single APK
+        continue-on-error: true
+        run: |
+          set -u
+          mkdir -p merge-tool
+          release="$(curl -fsSL https://api.github.com/repos/REAndroid/APKEditor/releases/latest)"
+          url="$(printf '%s' "$release" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((a["browser_download_url"] for a in d.get("assets",[]) if a["name"].lower().endswith(".jar")), ""))')"
+          if [ -z "$url" ]; then
+            echo "APKEditor JAR not found; leaving split bundle available."
+            exit 0
+          fi
+          curl -fL "$url" -o merge-tool/APKEditor.jar
+          java -Xmx5g -jar merge-tool/APKEditor.jar merge -i output -o Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk
+          test -s Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks build.jks --ks-key-alias kyobo-tts-fix \
+            --ks-pass pass:changeit --key-pass pass:changeit \
+            --out Kyobo-2.2.6-Samsung-TTS-Single.apk Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Kyobo-2.2.6-Samsung-TTS-Single.apk
+          ls -lh Kyobo-2.2.6-Samsung-TTS-Single.apk
+
+      - name: Upload single APK if merge succeeded
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kyobo-2.2.6-Samsung-TTS-Single
+          path: Kyobo-2.2.6-Samsung-TTS-Single.apk
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Upload installable split APK bundle
         uses: actions/upload-artifact@v4
