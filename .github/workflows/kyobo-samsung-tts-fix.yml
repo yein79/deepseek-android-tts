@@ -58,7 +58,17 @@ jobs:
           python3 tools/patch_kyobo_tts.py decoded
           cp "$ANDROID_HOME/build-tools/35.0.0/aapt2" ./aapt2
           chmod +x ./aapt2
-          java -Xmx5g -jar apktool.jar b decoded --aapt "$GITHUB_WORKSPACE/aapt2" -o base-patched-unsigned.apk
+          set +e
+          java -Xmx5g -jar apktool.jar b decoded --aapt "$GITHUB_WORKSPACE/aapt2" -o base-patched-full.apk
+          build_rc=$?
+          set -e
+          if [ "$build_rc" -eq 0 ] && [ -s base-patched-full.apk ]; then
+            cp base-patched-full.apk base-patched-unsigned.apk
+          else
+            echo "Resource repack failed; retaining original resources and transplanting the assembled classes4.dex."
+            test -s decoded/build/apk/classes4.dex
+            python3 tools/replace_dex.py base-original.apk decoded/build/apk/classes4.dex base-patched-unsigned.apk
+          fi
           test -s base-patched-unsigned.apk
 
       - name: Sign base and matching split APKs
