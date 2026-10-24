@@ -58,9 +58,11 @@ jobs:
           python3 tools/patch_kyobo_tts.py decoded
           # Reassemble only the patched DEX files. Apktool's resource rebuild fails on
           # framework resource names in this app, so preserve the original APK resources.
-          # Apktool bundles the smali assembler classes; invoke the main class directly.
-          java -cp apktool.jar org.jf.smali.Main assemble decoded/smali_classes4 -o patched-classes4.dex
-          java -cp apktool.jar org.jf.smali.Main assemble decoded/smali_classes6 -o patched-classes6.dex
+          curl -fL --retry 3 \
+            https://repo.maven.apache.org/maven2/org/smali/smali/2.5.2/smali-2.5.2.jar \
+            -o smali.jar
+          java -cp smali.jar org.jf.smali.Main assemble decoded/smali_classes4 -o patched-classes4.dex
+          java -cp smali.jar org.jf.smali.Main assemble decoded/smali_classes6 -o patched-classes6.dex
           test -s patched-classes4.dex
           test -s patched-classes6.dex
           python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex patched-classes4.dex classes6.dex patched-classes6.dex
