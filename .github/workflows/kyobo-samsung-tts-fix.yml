@@ -56,32 +56,17 @@ jobs:
           set -euo pipefail
           java -Xmx5g -jar apktool.jar d -f base-original.apk -o decoded
           python3 tools/patch_kyobo_tts.py decoded
-          cp "$ANDROID_HOME/build-tools/35.0.0/aapt2" ./aapt2
-          chmod +x ./aapt2
-          set +e
-          java -Xmx5g -jar apktool.jar b decoded --aapt "$GITHUB_WORKSPACE/aapt2" -o base-patched-full.apk
-          build_rc=$?
-          set -e
-          if [ "$build_rc" -eq 0 ] && [ -s base-patched-full.apk ]; then
-            cp base-patched-full.apk base-patched-unsigned.apk
-          else
-            echo "Resource repack failed; temporarily excluding decoded resources so Apktool assembles patched DEX without compiling incompatible resources."
-            mv decoded/res decoded/res.disabled
-            set +e
-            java -Xmx5g -jar apktool.jar b decoded -o dex-only.apk
-            dex_build_rc=$?
-            set -e
-            mv decoded/res.disabled decoded/res
-            if [ "$dex_build_rc" -ne 0 ] || [ ! -s dex-only.apk ]; then
-              echo "DEX-only build failed; trying Apktool's no-APK output mode."
-              java -Xmx5g -jar apktool.jar b decoded --no-apk
-            fi
-            unzip -p dex-only.apk classes4.dex > patched-classes4.dex
-            unzip -p dex-only.apk classes6.dex > patched-classes6.dex
-            test -s patched-classes4.dex
-            test -s patched-classes6.dex
-            python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex patched-classes4.dex classes6.dex patched-classes6.dex
-          fi
+          # Reassemble only the patched DEX files. Apktool's resource rebuild fails on
+          # framework resource names in this app, so preserve the original APK resources.
+          curl -fL --retry 3 \
+            https://repo.maven.apache.org/maven2/org/smali/smali/2.5.2/smali-2.5.2.jar \
+            -o smali.jar
+          java -jar smali.jar --version
+          java -Xmx3g -jar smali.jar assemble decoded/smali_classes4 -o patched-classes4.dex
+          java -Xmx3g -jar smali.jar assemble decoded/smali_classes6 -o patched-classes6.dex
+          test -s patched-classes4.dex
+          test -s patched-classes6.dex
+          python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex patched-classes4.dex classes6.dex patched-classes6.dex
           test -s base-patched-unsigned.apk
 
       - name: Sign base and matching split APKs
