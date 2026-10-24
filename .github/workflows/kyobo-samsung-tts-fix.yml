@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fL --retry 3 --retry-delay 2 \
-            'https://d.apkpure.net/b/XAPK/kr.co.kyobobook.KEL?nc=arm64-v8a&sv=24&versionCode=48' \
+            'https://d.apkpure.net/b/XAPK/kr.co.kyobobook.KEL?nc=arm64-v8a&sv=24&versionCode=48&lang=ko&locale=ko-KR&dpi=xxhdpi&density=xxhdpi' \
             -o source.xapk
           test "$(stat -c%s source.xapk)" -gt 50000000
           mkdir source
