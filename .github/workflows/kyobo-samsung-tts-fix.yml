@@ -58,8 +58,7 @@ jobs:
           python3 tools/patch_kyobo_tts.py decoded
           # Reassemble only the patched DEX files. Apktool's resource rebuild fails on
           # framework resource names in this app, so preserve the original APK resources.
-          sudo apt-get update
-          sudo apt-get install -y maven
+          mvn -version
           mkdir -p smali-deps
           cat > smali-pom.xml <<'POM'
           <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
