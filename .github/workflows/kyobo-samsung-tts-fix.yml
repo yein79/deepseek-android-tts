@@ -89,6 +89,14 @@ jobs:
           python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex patched-classes4.dex classes6.dex patched-classes6.dex
           test -s base-patched-unsigned.apk
 
+      - name: Upload Kyobo TTS diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kyobo-TTS-Diagnostics
+          path: kyobo-tts-diagnostics.txt
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Sign base and matching split APKs
         run: |
           set -euo pipefail
@@ -158,14 +166,6 @@ jobs:
             --out Kyobo-2.2.6-Samsung-TTS-Separate.apk Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Kyobo-2.2.6-Samsung-TTS-Separate.apk
           ls -lh Kyobo-2.2.6-Samsung-TTS-Separate.apk
-
-      - name: Upload Kyobo TTS diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: Kyobo-TTS-Diagnostics
-          path: kyobo-tts-diagnostics.txt
-          if-no-files-found: warn
-          retention-days: 7
 
       - name: Upload single APK if merge succeeded
         uses: actions/upload-artifact@v4
