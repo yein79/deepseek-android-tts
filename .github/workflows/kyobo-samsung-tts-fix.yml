@@ -65,8 +65,17 @@ jobs:
           if [ "$build_rc" -eq 0 ] && [ -s base-patched-full.apk ]; then
             cp base-patched-full.apk base-patched-unsigned.apk
           else
-            echo "Resource repack failed; rebuilding DEX files without resources, then transplanting them into the untouched original APK."
-            java -Xmx5g -jar apktool.jar b decoded --no-res -o dex-only.apk
+            echo "Resource repack failed; temporarily excluding decoded resources so Apktool assembles patched DEX without compiling incompatible resources."
+            mv decoded/res decoded/res.disabled
+            set +e
+            java -Xmx5g -jar apktool.jar b decoded -o dex-only.apk
+            dex_build_rc=$?
+            set -e
+            mv decoded/res.disabled decoded/res
+            if [ "$dex_build_rc" -ne 0 ] || [ ! -s dex-only.apk ]; then
+              echo "DEX-only build failed; trying Apktool's no-APK output mode."
+              java -Xmx5g -jar apktool.jar b decoded --no-apk
+            fi
             unzip -p dex-only.apk classes4.dex > patched-classes4.dex
             unzip -p dex-only.apk classes6.dex > patched-classes6.dex
             test -s patched-classes4.dex
