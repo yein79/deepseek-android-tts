@@ -63,6 +63,10 @@ jobs:
             grep -R -n -i -E 'voice|tts|read.?aloud|speech|preview|speaker|voice.?name' decoded/res/values decoded/smali* 2>/dev/null | head -n 1800 || true
             echo '=== TTS-related classes ==='
             find decoded/smali* -type f -iname '*tts*' -o -iname '*voice*' | head -n 500 || true
+            echo '=== Existing export/share/print and reader content APIs ==='
+            grep -R -n -E 'ACTION_CREATE_DOCUMENT|ACTION_SEND|PrintManager|createPrintDocumentAdapter|FileProvider|shareFile|exportBook|exportEpub|exportPdf|\.epub|\.pdf|ContentResolver;->openOutputStream|WebView;->evaluateJavascript|WebView;->getUrl|getHtml|getText|bookContent|BookContent|DownContentsVO|DownBookVO' decoded/smali* 2>/dev/null | head -n 2500 || true
+            echo '=== Reader and download-related class files ==='
+            find decoded/smali* -type f | grep -E '/(ViewerContainer|AbstractViewer|.*Book.*VO|.*Download.*|.*Content.*Manager|.*Reader.*Activity|.*Reader.*Fragment)' | head -n 1000 || true
           } > kyobo-tts-diagnostics.txt
           python3 tools/patch_kyobo_tts.py decoded
           # Reassemble only the patched DEX files. Apktool's resource rebuild fails on
