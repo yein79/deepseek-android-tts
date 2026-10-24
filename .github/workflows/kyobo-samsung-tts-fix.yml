@@ -1,0 +1,94 @@
+name: Build Kyobo Samsung TTS APK
+
+on:
+  push:
+    branches:
+      - kyobo-samsung-tts-fix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout patch script
+        uses: actions/checkout@v4
+
+      - name: Install Android build tools
+        uses: android-actions/setup-android@v3
+      - name: Install SDK build-tools
+        run: sdkmanager "build-tools;35.0.0" "platform-tools"
+
+      - name: Download Kyobo Library 2.2.6 arm64 bundle
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 \
+            'https://d.apkpure.net/b/XAPK/kr.co.kyobobook.KEL?nc=arm64-v8a&sv=24&versionCode=48' \
+            -o source.xapk
+          test "$(stat -c%s source.xapk)" -gt 50000000
+          mkdir source
+          unzip -q source.xapk -d source
+          find source -maxdepth 2 -type f -name '*.apk' -printf '%p %s bytes\n'
+          test "$(find source -type f -name '*.apk' | wc -l)" -ge 2
+          if [ -f source/base.apk ]; then
+            cp source/base.apk base-original.apk
+          elif [ -f source/kr.co.kyobobook.KEL.apk ]; then
+            cp source/kr.co.kyobobook.KEL.apk base-original.apk
+          else
+            echo 'Cannot identify base APK in XAPK'
+            exit 1
+          fi
+
+      - name: Install Apktool
+        run: |
+          set -euo pipefail
+          URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(a["browser_download_url"] for a in d["assets"] if a["name"].endswith(".jar") and a["name"].startswith("apktool_")))')"
+          curl -fL "$URL" -o apktool.jar
+          java -jar apktool.jar --version
+
+      - name: Decode and patch Samsung TTS engine
+        run: |
+          set -euo pipefail
+          java -Xmx5g -jar apktool.jar d -f base-original.apk -o decoded
+          python3 tools/patch_kyobo_tts.py decoded
+          java -Xmx5g -jar apktool.jar b decoded --use-aapt2 -o base-patched-unsigned.apk
+          test -s base-patched-unsigned.apk
+
+      - name: Sign base and matching split APKs
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v -keystore build.jks -storepass changeit -keypass changeit \
+            -alias kyobo-tts-fix -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname 'CN=Personal Kyobo TTS Fix, OU=Local, O=Local, L=Seoul, ST=Seoul, C=KR'
+          mkdir -p output
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 base-patched-unsigned.apk output/base.apk
+          "$BUILD_TOOLS/apksigner" sign --ks build.jks --ks-key-alias kyobo-tts-fix \
+            --ks-pass pass:changeit --key-pass pass:changeit --out output/base.apk.signed output/base.apk
+          mv output/base.apk.signed output/base.apk
+          for f in source/*.apk; do
+            [ -f "$f" ] || continue
+            name="$(basename "$f")"
+            case "$name" in
+              base.apk|kr.co.kyobobook.KEL.apk) continue ;;
+            esac
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$f" "output/$name.aligned"
+            "$BUILD_TOOLS/apksigner" sign --ks build.jks --ks-key-alias kyobo-tts-fix \
+              --ks-pass pass:changeit --key-pass pass:changeit --out "output/$name" "output/$name.aligned"
+            rm "output/$name.aligned"
+          done
+          "$BUILD_TOOLS/apksigner" verify --verbose output/base.apk
+          for f in output/*.apk; do "$BUILD_TOOLS/apksigner" verify "$f"; done
+          (cd output && zip -q -r ../Kyobo-2.2.6-Samsung-TTS-Fix.zip .)
+          sha256sum Kyobo-2.2.6-Samsung-TTS-Fix.zip
+
+      - name: Upload installable split APK bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kyobo-2.2.6-Samsung-TTS-Fix
+          path: Kyobo-2.2.6-Samsung-TTS-Fix.zip
+          if-no-files-found: error
+          retention-days: 30
