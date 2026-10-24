@@ -58,11 +58,20 @@ jobs:
           python3 tools/patch_kyobo_tts.py decoded
           # Reassemble only the patched DEX files. Apktool's resource rebuild fails on
           # framework resource names in this app, so preserve the original APK resources.
-          curl -fL --retry 3 \
-            https://repo.maven.apache.org/maven2/org/smali/smali/2.5.2/smali-2.5.2.jar \
-            -o smali.jar
-          java -cp smali.jar org.jf.smali.Main assemble decoded/smali_classes4 -o patched-classes4.dex
-          java -cp smali.jar org.jf.smali.Main assemble decoded/smali_classes6 -o patched-classes6.dex
+          sudo apt-get update
+          sudo apt-get install -y maven
+          mkdir -p smali-deps
+          cat > smali-pom.xml <<'POM'
+          <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>local.patch</groupId><artifactId>smali-tools</artifactId><version>1</version>
+            <dependencies><dependency><groupId>org.smali</groupId><artifactId>smali</artifactId><version>2.5.2</version></dependency></dependencies>
+          </project>
+          POM
+          mvn -q -f smali-pom.xml dependency:copy-dependencies -DoutputDirectory="$PWD/smali-deps"
+          curl -fL --retry 3 https://repo.maven.apache.org/maven2/org/smali/smali/2.5.2/smali-2.5.2.jar -o smali.jar
+          java -cp "smali.jar:smali-deps/*" org.jf.smali.Main assemble decoded/smali_classes4 -o patched-classes4.dex
+          java -cp "smali.jar:smali-deps/*" org.jf.smali.Main assemble decoded/smali_classes6 -o patched-classes6.dex
           test -s patched-classes4.dex
           test -s patched-classes6.dex
           python3 tools/replace_dex.py base-original.apk base-patched-unsigned.apk classes4.dex patched-classes4.dex classes6.dex patched-classes6.dex
