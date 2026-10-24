@@ -116,7 +116,7 @@ jobs:
 
           # The official app's signing key is unavailable, so package this as a
           # separate app instead of an update. This preserves the installed original.
-          java -Xmx5g -jar apktool.jar d -f Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk -o separate-decoded
+          java -Xmx5g -jar merge-tool/APKEditor.jar d -t xml -i Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk -o separate-decoded
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -125,18 +125,15 @@ jobs:
           old = "kr.co.kyobobook.KEL"
           new = "kr.co.kyobobook.KEL.samsungtts"
           if not re.search(r'package="' + re.escape(old) + r'"', s):
-              raise SystemExit("Expected original package id not found in merged manifest")
+              raise SystemExit("Expected original package id not found in APKEditor manifest")
+          # Rename package and any hard-coded authorities that use the same prefix.
           s = s.replace(old, new)
-          s, n = re.subn(
-              r'(<application\b[^>]*\bandroid:label=")[^"]*(")',
-              r'\1교보도서관 삼성TTS\2', s, count=1, flags=re.S
-          )
           p.write_text(s, encoding="utf-8")
           if f'package="{new}"' not in s:
               raise SystemExit("Separate package id was not applied")
-          print("Created side-by-side package:", new, "label changed:", bool(n))
+          print("Created side-by-side package:", new)
           PY
-          java -Xmx5g -jar apktool.jar b separate-decoded --aapt "$GITHUB_WORKSPACE/aapt2" -o Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
+          java -Xmx5g -jar merge-tool/APKEditor.jar b -t xml -i separate-decoded -o Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
           test -s Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks build.jks --ks-key-alias kyobo-tts-fix \
             --ks-pass pass:changeit --key-pass pass:changeit \
