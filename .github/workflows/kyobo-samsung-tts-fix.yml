@@ -55,6 +55,15 @@ jobs:
         run: |
           set -euo pipefail
           java -Xmx5g -jar apktool.jar d -f base-original.apk -o decoded
+          # Diagnostic: locate Kyobo's preview/reading voice selection paths before changing behavior.
+          {
+            echo '=== TextToSpeech voice/language API references ==='
+            grep -R -n -E 'TextToSpeech;->(setVoice|setLanguage|setSpeechRate|setPitch|getVoices|getDefaultVoiceName)|TextToSpeech\\$Voice' decoded/smali* || true
+            echo '=== Voice / preview / TTS preference strings ==='
+            grep -R -n -i -E 'voice|tts|read.?aloud|speech|preview|speaker|voice.?name' decoded/res/values decoded/smali* 2>/dev/null | head -n 1800 || true
+            echo '=== TTS-related classes ==='
+            find decoded/smali* -type f -iname '*tts*' -o -iname '*voice*' | head -n 500 || true
+          } > kyobo-tts-diagnostics.txt
           python3 tools/patch_kyobo_tts.py decoded
           # Reassemble only the patched DEX files. Apktool's resource rebuild fails on
           # framework resource names in this app, so preserve the original APK resources.
