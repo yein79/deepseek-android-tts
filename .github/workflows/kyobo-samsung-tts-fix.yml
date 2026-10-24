@@ -113,17 +113,42 @@ jobs:
           curl -fL "$url" -o merge-tool/APKEditor.jar
           java -Xmx5g -jar merge-tool/APKEditor.jar merge -i output -o Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk
           test -s Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk
+
+          # The official app's signing key is unavailable, so package this as a
+          # separate app instead of an update. This preserves the installed original.
+          java -Xmx5g -jar apktool.jar d -f Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk -o separate-decoded
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("separate-decoded/AndroidManifest.xml")
+          s = p.read_text(encoding="utf-8")
+          old = "kr.co.kyobobook.KEL"
+          new = "kr.co.kyobobook.KEL.samsungtts"
+          if not re.search(r'package="' + re.escape(old) + r'"', s):
+              raise SystemExit("Expected original package id not found in merged manifest")
+          s = s.replace(old, new)
+          s, n = re.subn(
+              r'(<application\b[^>]*\bandroid:label=")[^"]*(")',
+              r'\1교보도서관 삼성TTS\2', s, count=1, flags=re.S
+          )
+          p.write_text(s, encoding="utf-8")
+          if f'package="{new}"' not in s:
+              raise SystemExit("Separate package id was not applied")
+          print("Created side-by-side package:", new, "label changed:", bool(n))
+          PY
+          java -Xmx5g -jar apktool.jar b separate-decoded --aapt "$GITHUB_WORKSPACE/aapt2" -o Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
+          test -s Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks build.jks --ks-key-alias kyobo-tts-fix \
             --ks-pass pass:changeit --key-pass pass:changeit \
-            --out Kyobo-2.2.6-Samsung-TTS-Single.apk Kyobo-2.2.6-Samsung-TTS-Single-unsigned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Kyobo-2.2.6-Samsung-TTS-Single.apk
-          ls -lh Kyobo-2.2.6-Samsung-TTS-Single.apk
+            --out Kyobo-2.2.6-Samsung-TTS-Separate.apk Kyobo-2.2.6-Samsung-TTS-Separate-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose Kyobo-2.2.6-Samsung-TTS-Separate.apk
+          ls -lh Kyobo-2.2.6-Samsung-TTS-Separate.apk
 
       - name: Upload single APK if merge succeeded
         uses: actions/upload-artifact@v4
         with:
-          name: Kyobo-2.2.6-Samsung-TTS-Single
-          path: Kyobo-2.2.6-Samsung-TTS-Single.apk
+          name: Kyobo-2.2.6-Samsung-TTS-Separate
+          path: Kyobo-2.2.6-Samsung-TTS-Separate.apk
           if-no-files-found: ignore
           retention-days: 30
 
