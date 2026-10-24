@@ -56,6 +56,7 @@ jobs:
           set -euo pipefail
           java -Xmx5g -jar apktool.jar d -f base-original.apk -o decoded
           python3 tools/patch_kyobo_tts.py decoded
+          chmod +x "$ANDROID_HOME/build-tools/35.0.0/aapt2"
           java -Xmx5g -jar apktool.jar b decoded --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt2" -o base-patched-unsigned.apk
           test -s base-patched-unsigned.apk
 
