@@ -10,6 +10,6 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(8)
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions.jvmTarget = "1.8"
 }
