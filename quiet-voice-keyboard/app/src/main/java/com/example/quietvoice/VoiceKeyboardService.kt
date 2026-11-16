@@ -7,7 +7,6 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.view.View
-import android.view.inputmethod.InputConnection
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -16,7 +15,6 @@ class VoiceKeyboardService : InputMethodService() {
  private var recognizer: SpeechRecognizer? = null
  private var listening = false
  private var voiceButton: Button? = null
- private var composing = ""
 
  override fun onCreateInputView(): View {
   val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(8,8,8,8) }
@@ -33,21 +31,22 @@ class VoiceKeyboardService : InputMethodService() {
   if (recognizer == null) {
    recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
     sr.setRecognitionListener(object : RecognitionListener {
-     override fun onReadyForSpeech(params: Bundle?) { listening = true; composing = ""; voiceButton?.text = "듣는 중… 탭하여 종료" }
+     override fun onReadyForSpeech(params: Bundle?) { listening = true; voiceButton?.text = "듣는 중… 탭하여 종료" }
      override fun onBeginningOfSpeech() {}
      override fun onRmsChanged(rmsdB: Float) {}
      override fun onBufferReceived(buffer: ByteArray?) {}
      override fun onEndOfSpeech() { voiceButton?.text = "처리 중…" }
-     override fun onError(error: Int) { listening = false; composing = ""; currentInputConnection?.finishComposingText(); voiceButton?.text = "🎙 다시 말하기" }
+     override fun onError(error: Int) { listening = false; currentInputConnection?.setComposingText("", 1); currentInputConnection?.finishComposingText(); voiceButton?.text = "🎙 다시 말하기" }
      override fun onResults(results: Bundle?) {
       val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+      currentInputConnection?.setComposingText("", 1)
       currentInputConnection?.finishComposingText()
       if (text.isNotBlank()) currentInputConnection?.commitText(text, 1)
-      composing = ""; listening = false; voiceButton?.text = "🎙 음성 입력"
+      listening = false; voiceButton?.text = "🎙 음성 입력"
      }
      override fun onPartialResults(partialResults: Bundle?) {
       val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-      if (text.isNotBlank()) { composing = text; currentInputConnection?.setComposingText(text, 1) }
+      if (text.isNotBlank()) currentInputConnection?.setComposingText(text, 1)
      }
      override fun onEvent(eventType: Int, params: Bundle?) {}
     })
