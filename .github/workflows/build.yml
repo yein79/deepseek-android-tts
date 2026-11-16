@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Quiet Voice Keyboard APK
 
 on:
   push:
@@ -19,11 +19,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+      - name: Build keyboard debug APK
+        run: gradle --no-daemon -p quiet-voice-keyboard assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: deepseek-android-tts-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: QuietVoiceKeyboard-debug-apk
+          path: quiet-voice-keyboard/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
