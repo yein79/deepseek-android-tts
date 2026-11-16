@@ -20,6 +20,7 @@ import android.widget.Toast
 class VoiceKeyboardService : InputMethodService() {
  private var recognizer: SpeechRecognizer? = null
  private var listening = false
+ private var listeningRequested = false
  private var voiceButton: Button? = null
  private val repeatHandler = Handler(Looper.getMainLooper())
  private val repeatDelete = object : Runnable {
@@ -27,6 +28,9 @@ class VoiceKeyboardService : InputMethodService() {
    currentInputConnection?.deleteSurroundingText(1, 0)
    repeatHandler.postDelayed(this, 55L)
   }
+ }
+ private val restartListening = Runnable {
+  if (listeningRequested) startRecognitionSession()
  }
 
  override fun onCreateInputView(): View {
@@ -57,12 +61,24 @@ class VoiceKeyboardService : InputMethodService() {
   return row
  }
 
+ private fun addPunctuation(source: String): String {
+  val s = source.trim()
+  if (s.isEmpty() || s.last() in listOf('.', ',', '!', '?', '。', '！', '？')) return s
+  val questionEnding = Regex("(인가요|인가|나요|습니까|습니까요|습니까|습니까|는가요|는가|ㄹ까요|을까요|까요|할까|일까|니|냐|까|어|아|야|여)$")
+  val questionWords = listOf("왜", "뭐", "무엇", "어떻게", "어디", "언제", "누구", "어느", "무슨", "몇", "얼마", "어떤", "어째서")
+  val looksQuestion = questionEnding.containsMatchIn(s) || questionWords.any { s.startsWith(it) || s.contains(" $it") }
+  if (looksQuestion) return "$s?"
+  val exclamations = listOf("와", "우와", "아", "아이고", "세상에", "헐", "대박", "정말", "진짜", "너무 좋", "정말 좋", "멋지")
+  val endingExclamation = Regex("(구나|군요|네요|네|다)$").containsMatchIn(s)
+  if (exclamations.any { s.startsWith(it) || s.contains(" $it") } || (endingExclamation && (s.startsWith("정말") || s.startsWith("진짜") || s.startsWith("너무")))) return "$s!"
+  return s
+ }
+
  private fun correctText(source: String): String {
   var s = source.replace('\u00a0', ' ')
   s = s.replace(Regex("[ \\t]+"), " ")
   s = s.replace(Regex("([가-힣])\\1{2,}"), "$1$1")
   s = s.replace(Regex("\\b(\\w+)(?:\\s+\\1\\b)+"), "$1")
-  // Conservative rule-based spelling/spacing cleanup, not AI semantic rewriting.
   val rules = listOf(
    "할수있다" to "할 수 있다", "할수없다" to "할 수 없다",
    "할수 있는" to "할 수 있는", "할수 없는" to "할 수 없는",
@@ -82,7 +98,7 @@ class VoiceKeyboardService : InputMethodService() {
   s = s.replace(Regex(" +([,.!?])"), "$1")
   s = s.replace(Regex("([,.!?])(?=[가-힣A-Za-z0-9])"), "$1 ")
   s = s.replace(Regex(" {2,}"), " ").trim()
-  return s
+  return addPunctuation(s)
  }
 
  private fun correctThenEnter() {
@@ -98,31 +114,24 @@ class VoiceKeyboardService : InputMethodService() {
      try {
       connection.setSelection(start, start + whole.length)
       connection.commitText(corrected, 1)
-     } finally {
-      connection.endBatchEdit()
-     }
+     } finally { connection.endBatchEdit() }
     }
    } else {
-    // Fallback for editors that don't provide ExtractedText.
     val before = connection.getTextBeforeCursor(10000, 0)?.toString()
     val after = connection.getTextAfterCursor(10000, 0)?.toString()
     if (before != null && after != null) {
-     val wholeFallback = before + after
-     val corrected = correctText(wholeFallback)
-     if (corrected != wholeFallback) {
+     val all = before + after
+     val corrected = correctText(all)
+     if (corrected != all) {
       connection.beginBatchEdit()
       try {
        connection.deleteSurroundingText(before.length, after.length)
        connection.commitText(corrected, 1)
-      } finally {
-       connection.endBatchEdit()
-      }
+      } finally { connection.endBatchEdit() }
      }
     }
    }
-  } catch (_: Exception) {
-   // Preserve Enter behavior even if an editor blocks text extraction.
-  }
+  } catch (_: Exception) { }
   val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION)
   val handled = when (action) {
    EditorInfo.IME_ACTION_GO -> connection.performEditorAction(EditorInfo.IME_ACTION_GO)
@@ -138,23 +147,51 @@ class VoiceKeyboardService : InputMethodService() {
  }
 
  private fun toggleRecognition() {
-  if (listening) { recognizer?.stopListening(); return }
-  if (!SpeechRecognizer.isRecognitionAvailable(this)) { Toast.makeText(this, "이 기기에서 음성 인식을 사용할 수 없습니다.", Toast.LENGTH_LONG).show(); return }
+  if (listeningRequested) {
+   listeningRequested = false
+   repeatHandler.removeCallbacks(restartListening)
+   try { recognizer?.stopListening() } catch (_: Exception) { }
+   listening = false
+   currentInputConnection?.finishComposingText()
+   voiceButton?.text = "🎙 음성"
+   return
+  }
+  if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+   Toast.makeText(this, "이 기기에서 음성 인식을 사용할 수 없습니다.", Toast.LENGTH_LONG).show()
+   return
+  }
+  listeningRequested = true
+  voiceButton?.text = "듣는 중… (눌러 종료)"
   if (recognizer == null) {
    recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
     sr.setRecognitionListener(object : RecognitionListener {
-     override fun onReadyForSpeech(params: Bundle?) { listening = true; voiceButton?.text = "듣는 중…" }
+     override fun onReadyForSpeech(params: Bundle?) { listening = true; voiceButton?.text = "듣는 중… (눌러 종료)" }
      override fun onBeginningOfSpeech() {}
      override fun onRmsChanged(rmsdB: Float) {}
      override fun onBufferReceived(buffer: ByteArray?) {}
-     override fun onEndOfSpeech() { voiceButton?.text = "처리 중…" }
-     override fun onError(error: Int) { listening = false; currentInputConnection?.setComposingText("", 1); currentInputConnection?.finishComposingText(); voiceButton?.text = "🎙 다시" }
+     override fun onEndOfSpeech() { listening = false; voiceButton?.text = if (listeningRequested) "처리 중…" else "🎙 음성" }
+     override fun onError(error: Int) {
+      listening = false
+      currentInputConnection?.finishComposingText()
+      if (listeningRequested && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+       voiceButton?.text = "다시 듣는 중…"
+       repeatHandler.removeCallbacks(restartListening)
+       repeatHandler.postDelayed(restartListening, 300L)
+      } else {
+       listeningRequested = false
+       voiceButton?.text = "🎙 다시"
+      }
+     }
      override fun onResults(results: Bundle?) {
       val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-      currentInputConnection?.setComposingText("", 1)
       currentInputConnection?.finishComposingText()
-      if (text.isNotBlank()) currentInputConnection?.commitText(text, 1)
-      listening = false; voiceButton?.text = "🎙 음성"
+      if (text.isNotBlank()) currentInputConnection?.commitText(addPunctuation(text), 1)
+      listening = false
+      if (listeningRequested) {
+       voiceButton?.text = "다시 듣는 중…"
+       repeatHandler.removeCallbacks(restartListening)
+       repeatHandler.postDelayed(restartListening, 220L)
+      } else voiceButton?.text = "🎙 음성"
      }
      override fun onPartialResults(partialResults: Bundle?) {
       val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
@@ -164,20 +201,34 @@ class VoiceKeyboardService : InputMethodService() {
     })
    }
   }
+  startRecognitionSession()
+ }
+
+ private fun startRecognitionSession() {
+  if (!listeningRequested) return
   val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-   putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
-   putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+   // Silence closes only the current recognition segment; listening restarts automatically.
+   putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+   putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 800L)
   }
-  try { recognizer?.startListening(intent) } catch (_: Exception) { listening = false; Toast.makeText(this, "음성 인식을 시작하지 못했습니다.", Toast.LENGTH_SHORT).show() }
+  try {
+   recognizer?.startListening(intent)
+  } catch (_: Exception) {
+   listening = false
+   repeatHandler.removeCallbacks(restartListening)
+   repeatHandler.postDelayed(restartListening, 500L)
+  }
  }
 
  override fun onDestroy() {
+  listeningRequested = false
   repeatHandler.removeCallbacks(repeatDelete)
+  repeatHandler.removeCallbacks(restartListening)
   recognizer?.destroy()
   recognizer = null
   super.onDestroy()
